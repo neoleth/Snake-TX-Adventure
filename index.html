@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snake TX Adventure - GenLayer Bradbury</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.5/ethers.umd.min.js"></script>
+  <style>
+    canvas { image-rendering: pixelated; border: 4px solid #22c55e; }
+  </style>
+</head>
+<body class="bg-gray-950 text-white">
+  <div class="max-w-4xl mx-auto p-6">
+    <h1 class="text-4xl font-bold text-green-500 mb-2 text-center">🐍 SNAKE TX ADVENTURE</h1>
+    <p class="text-center text-gray-400 mb-8">GenLayer Bradbury Testnet • Every move is a real transaction</p>
+
+    <div class="flex justify-between items-center mb-6">
+      <button id="connectBtn" class="bg-green-600 hover:bg-green-500 px-6 py-3 rounded-xl font-bold">
+        Connect Wallet
+      </button>
+      <div id="walletInfo" class="hidden text-sm text-right">
+        <p id="address"></p>
+        <p id="balance"></p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <!-- Game Area -->
+      <div class="md:col-span-2 bg-black p-4 rounded-2xl">
+        <canvas id="gameCanvas" width="400" height="400" class="mx-auto"></canvas>
+      </div>
+
+      <!-- Side Panel -->
+      <div class="space-y-4">
+        <div class="bg-zinc-900 p-5 rounded-2xl">
+          <p class="text-lg font-bold mb-3">Score: <span id="score" class="text-green-400">0</span></p>
+          <p class="text-sm">Best Score: <span id="highscore" class="text-yellow-400">0</span></p>
+        </div>
+
+        <button id="startBtn" class="w-full bg-green-600 hover:bg-green-500 py-4 rounded-xl font-bold text-lg disabled:opacity-50">
+          Start New Game (TX)
+        </button>
+
+        <div class="bg-zinc-900 p-5 rounded-2xl">
+          <h3 class="font-bold mb-3">Leaderboard</h3>
+          <div id="leaderboard" class="text-sm space-y-1">
+            <span class="text-gray-500 italic">v0.2.17 Leaderboard disabled. Showing Best Score.</span>
+          </div>
+        </div>
+
+        <div id="status" class="text-sm min-h-[80px] bg-zinc-900 p-4 rounded-xl font-mono text-gray-400">Waiting for wallet connection...</div>
+      </div>
+    </div>
+
+    <div class="mt-8 text-center text-xs text-gray-500">
+      Contract: 0xbc22b3e2371541e11ea0284766a8a1eb6954fef4aba8ba55dd923ec0891bad19
+    </div>
+  </div>
+
+  <script>
+    // === GENLAYER BRADBURY CONFIG ===
+    const RAW_CONTRACT_ADDRESS = "0xbc22b3e2371541e11ea0284766a8a1eb6954fef4aba8ba55dd923ec0891bad19";
+    // Fix Invalid 'to' address: EVM requires 20-byte addresses, properly checksummed.
+    // Slicing the 32-byte string to extract the 20-byte valid address and checksumming it.
+    const CONTRACT_ADDRESS = ethers.getAddress(RAW_CONTRACT_ADDRESS.slice(0, 42));
+    const RPC_URL = "https://rpc-bradbury.genlayer.com";
+    const CHAIN_ID = 4221;
+
+    let provider, signer, contract, walletAddress;
+    let isPendingTx = false;
+    let currentDirection = "up";
+
+    const ABI = [
+      "function start_game() returns (string)",
+      "function make_move(string direction) returns (string)",
+      "function get_game_state(address user_address) view returns (string)",
+      "function get_high_score(address wallet) view returns (uint256)"
+    ];
+    const iface = new ethers.Interface(ABI);
+
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const SCALE = 20;
+
+    async function connectWallet() {
+      const status = document.getElementById("status");
+      status.textContent = "Connecting to MetaMask...";
+
+      if (!window.ethereum) {
+        return alert("Please install MetaMask!");
+      }
+
+      try {
+        provider = new ethers.BrowserProvider(window.ethereum);
+        
+        // Switch network
+        const network = await provider.getNetwork();
+        if (Number(network.chainId) !== CHAIN_ID) {
+          try {
+            await window.ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: '0x' + CHAIN_ID.toString(16) }]
+            });
+          } catch (switchError) {
+             // Handle adding chain omitted for brevity if already injected by manual user
+            status.textContent = "❌ Please manually switch to GenLayer Bradbury Testnet (Chain ID: 4221)";
+            return;
+          }
+        }
+
+        await provider.send("eth_requestAccounts", []);
+        signer = await provider.getSigner();
+        walletAddress = await signer.getAddress();
+
+        // Verify contract exists before continuing
+        const code = await provider.getCode(CONTRACT_ADDRESS);
+        if (code === "0x") {
+           throw new Error("Contract not deployed at this address!");
+        }
+
+        // Initialize Ethers Contract
+        contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+
+        document.getElementById("address").textContent = `Wallet: ${walletAddress.slice(0,8)}...${walletAddress.slice(-6)}`;
+        document.getElementById("walletInfo").classList.remove("hidden");
+
+        await updateBalance();
+        await updateGameState();
+        await loadHighScore();
+        status.textContent = "✅ Connected! Click 'Start New Game' to begin.";
+      } catch (e) {
+        console.error("Connection Debug Error:", e);
+        status.textContent = "❌ Connection error: " + (e.message || e);
+      }
+    }
+
+
+
+    async function updateBalance() {
+      const bal = await provider.getBalance(walletAddress);
+      document.getElementById("balance").textContent = `GEN: ${parseFloat(ethers.formatEther(bal)).toFixed(4)}`;
+    }
+
+    async function startNewGame() {
+      const status = document.getElementById("status");
+      if (!contract) return alert("Please connect wallet first!");
+      if (isPendingTx) return;
+
+      status.textContent = "Sending transaction... (start_game)";
+      isPendingTx = true;
+      document.getElementById("startBtn").disabled = true;
+
+      try {
+        const tx = await contract.start_game({ gasLimit: 800000 });
+        status.textContent = `TX Hash: ${tx.hash.slice(0,12)}...\nWaiting for confirmation...`;
+        await tx.wait();
+        status.textContent = "✅ Game started! Use arrow keys to play.";
+        currentDirection = "up";
+        await updateGameState();
+      } catch (e) {
+        console.error("TX Error:", e);
+        status.textContent = "❌ Transaction failed: " + (e.shortMessage || e.message).slice(0, 50);
+      } finally {
+        isPendingTx = false;
+        document.getElementById("startBtn").disabled = false;
+        await updateBalance();
+      }
+    }
+
+    async function makeMove(direction) {
+      if (!contract || isPendingTx) return;
+      currentDirection = direction;
+      isPendingTx = true;
+      
+      const status = document.getElementById("status");
+
+      try {
+        const tx = await contract.make_move(direction, { gasLimit: 600000 });
+        status.textContent = `Move [${direction.toUpperCase()}]\nTX: ${tx.hash.slice(0,10)}... (Confirming)`;
+        await tx.wait();
+        status.textContent = `✅ Move confirmed!`;
+        await updateGameState();
+        await loadHighScore();
+      } catch (e) {
+        console.error("TX Error:", e);
+        status.textContent = "❌ Move failed.";
+      } finally {
+        isPendingTx = false;
+        await updateBalance();
+      }
+    }
+
+    async function updateGameState() {
+      if (!contract) return;
+      try {
+        const stateStr = await contract.get_game_state(walletAddress);
+        const state = JSON.parse(stateStr);
+        if (state.error) return;
+
+        document.getElementById("score").textContent = state.score || 0;
+
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, 400, 400);
+
+        // Snake points are stored as {"x": number, "y": number}
+        if (state.snake) {
+          ctx.fillStyle = "#22c55e";
+          state.snake.forEach(p => {
+            ctx.fillRect(p.x * SCALE, p.y * SCALE, SCALE - 1, SCALE - 1);
+          });
+        }
+
+        // Food
+        if (state.food) {
+          ctx.fillStyle = "red";
+          ctx.fillRect(state.food.x * SCALE, state.food.y * SCALE, SCALE - 1, SCALE - 1);
+        }
+
+        if (state.status === "game_over") {
+          document.getElementById("status").textContent = "💀 GAME OVER!";
+        }
+      } catch (e) {
+        console.error("Parse state error:", e);
+      }
+    }
+
+    async function loadHighScore() {
+      if (!contract) return;
+      try {
+        const hs = await contract.get_high_score(walletAddress);
+        document.getElementById("highscore").textContent = hs.toString();
+      } catch(e) {}
+    }
+
+    // Keyboard Controls
+    document.addEventListener("keydown", e => {
+      // Map React SnakeGame keyMap to matching directions expected by the contract ('up', 'down', 'left', 'right')
+      const keyMap = {
+        "ArrowUp": "up", "w": "up", "W": "up",
+        "ArrowDown": "down", "s": "down", "S": "down",
+        "ArrowLeft": "left", "a": "left", "A": "left",
+        "ArrowRight": "right", "d": "right", "D": "right"
+      };
+
+      if (!keyMap[e.key]) return;
+      e.preventDefault();
+      
+      const dir = keyMap[e.key];
+      // Fire transaction immediately based on keypress
+      if (!isPendingTx) {
+          makeMove(dir);
+      }
+    });
+
+    // Button Events
+    document.getElementById("connectBtn").onclick = connectWallet;
+    document.getElementById("startBtn").onclick = startNewGame;
+  </script>
+</body>
+</html>
+

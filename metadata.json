@@ -1,0 +1,6 @@
+{
+  "name": "Snake TX Adventure",
+  "description": "A demo frontend and intelligent contract code for an on-chain Snake game built for the GenLayer ecosystem.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
