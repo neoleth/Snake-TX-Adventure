@@ -110,24 +110,25 @@
         signer = await provider.getSigner();
         walletAddress = await signer.getAddress();
 
-        // Verify contract exists before continuing, but handle GenLayer RPC limitations gracefully
+        // Fix Invalid 'to' address error.
+        // GenLayer addresses are 32 bytes (64 hex characters), which causes ethers.Contract
+        // and MetaMask to throw "Invalid address" since EVM strictly uses 20 bytes.
+        // We preserve CONTRACT_ADDRESS constant fully, but slice to 20 bytes for the contract instantiation.
         let finalAddress = CONTRACT_ADDRESS;
-        
-        try {
-          // If address is 32 bytes (64 hex characters), ethers.Contract will crash. 
-          // We will attempt to checksum it.
-          if (finalAddress.length > 42) {
-             console.warn("Contract address is longer than standard 20 bytes. It might be a GenLayer hash.");
-          }
-          finalAddress = ethers.getAddress(finalAddress);
-        } catch (addrErr) {
-          console.warn("Checksum validation failed. We will use the literal address. Error:", addrErr.message);
+        if (finalAddress.length > 42) {
+            console.log("Truncating GenLayer 32-byte address to 20-bytes for Ethers.js compatibility.");
+            finalAddress = finalAddress.slice(0, 42);
         }
+        
+        // Properly checksum the 20-byte address format as requested 
+        finalAddress = ethers.getAddress(finalAddress);
 
         try {
           const code = await provider.getCode(finalAddress);
           if (code === "0x") {
              console.warn("Contract not deployed at this address, or getCode returned 0x.");
+          } else {
+             console.log("Contract code found at:", finalAddress);
           }
         } catch (codeErr) {
           console.warn("getCode verification skipped (RPC might not support it):", codeErr.message || codeErr);
@@ -153,11 +154,14 @@
       }
     }
 
-
-
     async function updateBalance() {
-      const bal = await provider.getBalance(walletAddress);
-      document.getElementById("balance").textContent = `GEN: ${parseFloat(ethers.formatEther(bal)).toFixed(4)}`;
+      try {
+        const bal = await provider.getBalance(walletAddress);
+        document.getElementById("balance").textContent = `GEN: ${parseFloat(ethers.formatEther(bal)).toFixed(4)}`;
+      } catch (e) {
+        console.warn("getBalance RPC failed:", e.message);
+        document.getElementById("balance").textContent = "GEN: (Sync error)";
+      }
     }
 
     async function startNewGame() {
@@ -178,7 +182,8 @@
         await updateGameState();
       } catch (e) {
         console.error("TX Error:", e);
-        status.textContent = "❌ Transaction failed: " + (e.shortMessage || e.message).slice(0, 50);
+        const errMsg = e.error?.message || e.shortMessage || e.message || "Unknown error";
+        status.textContent = "❌ Transaction failed: " + errMsg;
       } finally {
         isPendingTx = false;
         document.getElementById("startBtn").disabled = false;
@@ -202,7 +207,8 @@
         await loadHighScore();
       } catch (e) {
         console.error("TX Error:", e);
-        status.textContent = "❌ Move failed.";
+        const errMsg = e.error?.message || e.shortMessage || e.message || "Unknown error";
+        status.textContent = "❌ Move failed: " + errMsg;
       } finally {
         isPendingTx = false;
         await updateBalance();
