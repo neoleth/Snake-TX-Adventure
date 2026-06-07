@@ -60,8 +60,8 @@
 
   <script>
     // === GENLAYER BRADBURY CONFIG ===
-    // ⚠️ TODO: Replace this with your actual deployed Snake GAME contract address (20-byte EVM format) 
-    const CONTRACT_ADDRESS = "0x0000000000000000000000000000000000000000";
+    // This is the address provided by the user. If it fails, they might have deployed the wrong Python code.
+    const CONTRACT_ADDRESS = "0x3F9f2Cf5F42A32A64A92aA52BD74911945B04214";
     const RPC_URL = "https://rpc-bradbury.genlayer.com";
     const CHAIN_ID = 4221;
 
@@ -252,6 +252,9 @@
         }
       } catch (e) {
         console.error("Parse state error:", e);
+        if (e.code === "CALL_EXCEPTION" || e.message.includes("missing revert data") || e.message.includes("could not decode result data")) {
+           document.getElementById("status").textContent = "❌ Error: Contract exists but doesn't have Snake game functions. Did you deploy PredictionMarket instead of SnakeGame?";
+        }
       }
     }
 
