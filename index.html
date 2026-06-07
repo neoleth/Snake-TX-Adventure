@@ -113,10 +113,14 @@
         signer = await provider.getSigner();
         walletAddress = await signer.getAddress();
 
-        // Verify contract exists before continuing
-        const code = await provider.getCode(CONTRACT_ADDRESS);
-        if (code === "0x") {
-           throw new Error("Contract not deployed at this address!");
+        // Verify contract exists before continuing, but handle GenLayer RPC limitations gracefully
+        try {
+          const code = await provider.getCode(CONTRACT_ADDRESS);
+          if (code === "0x") {
+             console.warn("Contract not deployed at this address, or getCode returned 0x.");
+          }
+        } catch (codeErr) {
+          console.warn("getCode verification skipped (RPC might not support it):", codeErr.message || codeErr);
         }
 
         // Initialize Ethers Contract
