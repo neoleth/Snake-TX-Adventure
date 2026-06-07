@@ -92,7 +92,7 @@
       }
 
       try {
-        provider = new ethers.BrowserProvider(window.ethereum);
+        provider = new ethers.BrowserProvider(window.ethereum, "any");
         
         // Switch network
         const network = await provider.getNetwork();
@@ -103,10 +103,32 @@
               params: [{ chainId: '0x' + CHAIN_ID.toString(16) }]
             });
           } catch (switchError) {
-             // Handle adding chain omitted for brevity if already injected by manual user
-            status.textContent = "❌ Please manually switch to GenLayer Bradbury Testnet (Chain ID: 4221)";
-            return;
+            if (switchError.code === 4902) {
+              try {
+                await window.ethereum.request({
+                  method: 'wallet_addEthereumChain',
+                  params: [
+                    {
+                      chainId: '0x' + CHAIN_ID.toString(16),
+                      chainName: 'GenLayer Bradbury Testnet',
+                      rpcUrls: [RPC_URL],
+                      nativeCurrency: { name: 'GEN', symbol: 'GEN', decimals: 18 },
+                      blockExplorerUrls: ['https://explorer-bradbury.genlayer.com/']
+                    }
+                  ]
+                });
+              } catch (addError) {
+                status.textContent = "❌ Failed to add network: " + addError.message;
+                return;
+              }
+            } else {
+              status.textContent = "❌ Please manually switch to GenLayer Bradbury Testnet (Chain ID: 4221)";
+              return;
+            }
           }
+          // after chain switch, wait for provider to register it to prevent NETWORK_ERROR
+          await new Promise(r => setTimeout(r, 1000));
+          provider = new ethers.BrowserProvider(window.ethereum, "any");
         }
 
         await provider.send("eth_requestAccounts", []);
@@ -156,7 +178,11 @@
         status.textContent = "✅ Connected! Click 'Start New Game' to begin.";
       } catch (e) {
         console.error("Connection Debug Error:", e);
-        status.textContent = "❌ Connection error: " + (e.message || e);
+        let errMsg = e.message || e;
+        if (typeof errMsg === 'string' && (errMsg.includes("network changed") || errMsg.includes("RPC endpoint not found"))) {
+           errMsg += " (Please try refreshing the page or check your MetaMask RPC settings.)";
+        }
+        status.textContent = "❌ Connection error: " + errMsg;
       }
     }
 
@@ -188,7 +214,10 @@
         await updateGameState();
       } catch (e) {
         console.error("TX Error:", e);
-        const errMsg = e.error?.message || e.shortMessage || e.message || "Unknown error";
+        let errMsg = e.error?.message || e.shortMessage || e.message || "Unknown error";
+        if (errMsg.includes("execution reverted")) {
+           errMsg += " (⚠️ The execution reverted. You most likely deployed the 'PredictionMarket' contract from your previous assignment instead of the 'SnakeGame' Python code.)";
+        }
         status.textContent = "❌ Transaction failed: " + errMsg;
       } finally {
         isPendingTx = false;
