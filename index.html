@@ -60,10 +60,7 @@
 
   <script>
     // === GENLAYER BRADBURY CONFIG ===
-    const RAW_CONTRACT_ADDRESS = "0xbc22b3e2371541e11ea0284766a8a1eb6954fef4aba8ba55dd923ec0891bad19";
-    // Fix Invalid 'to' address: EVM requires 20-byte addresses, properly checksummed.
-    // Slicing the 32-byte string to extract the 20-byte valid address and checksumming it.
-    const CONTRACT_ADDRESS = ethers.getAddress(RAW_CONTRACT_ADDRESS.slice(0, 42));
+    const CONTRACT_ADDRESS = "0xbc22b3e2371541e11ea0284766a8a1eb6954fef4aba8ba55dd923ec0891bad19";
     const RPC_URL = "https://rpc-bradbury.genlayer.com";
     const CHAIN_ID = 4221;
 
@@ -114,8 +111,21 @@
         walletAddress = await signer.getAddress();
 
         // Verify contract exists before continuing, but handle GenLayer RPC limitations gracefully
+        let finalAddress = CONTRACT_ADDRESS;
+        
         try {
-          const code = await provider.getCode(CONTRACT_ADDRESS);
+          // If address is 32 bytes (64 hex characters), ethers.Contract will crash. 
+          // We will attempt to checksum it.
+          if (finalAddress.length > 42) {
+             console.warn("Contract address is longer than standard 20 bytes. It might be a GenLayer hash.");
+          }
+          finalAddress = ethers.getAddress(finalAddress);
+        } catch (addrErr) {
+          console.warn("Checksum validation failed. We will use the literal address. Error:", addrErr.message);
+        }
+
+        try {
+          const code = await provider.getCode(finalAddress);
           if (code === "0x") {
              console.warn("Contract not deployed at this address, or getCode returned 0x.");
           }
@@ -124,7 +134,11 @@
         }
 
         // Initialize Ethers Contract
-        contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+        try {
+          contract = new ethers.Contract(finalAddress, ABI, signer);
+        } catch(e) {
+          throw new Error("Failed to create ethers.Contract: " + e.message);
+        }
 
         document.getElementById("address").textContent = `Wallet: ${walletAddress.slice(0,8)}...${walletAddress.slice(-6)}`;
         document.getElementById("walletInfo").classList.remove("hidden");
