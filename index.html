@@ -54,15 +54,18 @@
     </div>
 
     <div class="mt-8 text-center text-xs text-gray-500">
-      Contract: 0xbc22b3e2371541e11ea0284766a8a1eb6954fef4aba8ba55dd923ec0891bad19
+      Contract: <span id="displayAddress" class="break-all text-yellow-500 font-bold">PLEASE_ENTER_YOUR_CONTRACT_ADDRESS_IN_CODE</span>
     </div>
   </div>
 
   <script>
     // === GENLAYER BRADBURY CONFIG ===
-    const CONTRACT_ADDRESS = "0xbc22b3e2371541e11ea0284766a8a1eb6954fef4aba8ba55dd923ec0891bad19";
+    // ⚠️ TODO: Replace this with your actual deployed Snake GAME contract address (20-byte EVM format) 
+    const CONTRACT_ADDRESS = "0x0000000000000000000000000000000000000000";
     const RPC_URL = "https://rpc-bradbury.genlayer.com";
     const CHAIN_ID = 4221;
+
+    document.getElementById("displayAddress").textContent = CONTRACT_ADDRESS;
 
     let provider, signer, contract, walletAddress;
     let isPendingTx = false;
@@ -126,7 +129,10 @@
         try {
           const code = await provider.getCode(finalAddress);
           if (code === "0x") {
-             console.warn("Contract not deployed at this address, or getCode returned 0x.");
+             const errorMsg = `Contract not deployed at address ${finalAddress}. Please make sure you pasted the 20-byte Contract Address correctly, NOT a Transaction Hash.`;
+             console.error(errorMsg);
+             document.getElementById("status").textContent = "❌ " + errorMsg;
+             return;
           } else {
              console.log("Contract code found at:", finalAddress);
           }
