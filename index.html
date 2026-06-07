@@ -61,7 +61,7 @@
   <script>
     // === GENLAYER BRADBURY CONFIG ===
     // This is the address provided by the user. If it fails, they might have deployed the wrong Python code.
-    const CONTRACT_ADDRESS = "0x3F9f2Cf5F42A32A64A92aA52BD74911945B04214";
+    const CONTRACT_ADDRESS = "0x0656507AFF3D7f2Ff899D0c7c6240d6AAC9e235C";
     const RPC_URL = "https://rpc-bradbury.genlayer.com";
     const CHAIN_ID = 4221;
 
@@ -74,8 +74,8 @@
     const ABI = [
       "function start_game() returns (string)",
       "function make_move(string direction) returns (string)",
-      "function get_game_state(address user_address) view returns (string)",
-      "function get_high_score(address wallet) view returns (uint256)"
+      "function get_game_state(string user_address) view returns (string)",
+      "function get_high_score(string wallet) view returns (uint256)"
     ];
     const iface = new ethers.Interface(ABI);
 
@@ -224,7 +224,7 @@
     async function updateGameState() {
       if (!contract) return;
       try {
-        const stateStr = await contract.get_game_state(walletAddress);
+        const stateStr = await contract.get_game_state(walletAddress.toLowerCase());
         const state = JSON.parse(stateStr);
         if (state.error) return;
 
@@ -261,7 +261,7 @@
     async function loadHighScore() {
       if (!contract) return;
       try {
-        const hs = await contract.get_high_score(walletAddress);
+        const hs = await contract.get_high_score(walletAddress.toLowerCase());
         document.getElementById("highscore").textContent = hs.toString();
       } catch(e) {}
     }
