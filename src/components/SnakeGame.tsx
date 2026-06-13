@@ -4,12 +4,12 @@ import { ethers } from 'ethers';
 
 const GRID_SIZE = 20;
 
-const CONTRACT_ADDRESS = ethers.getAddress("0x0656507AFF3D7f2Ff899D0c7c6240d6AAC9e235C");
+const CONTRACT_ADDRESS = ethers.getAddress("0xdc043eae0d32573b9ad98c4e4e151d04ea8a57dc"); // First 42 characters, checksummed from 0xdc043eae0d32573b9ad98c4e4e151d04ea8a57dcada202dcd50aa53cc3121d7b
 const ABI = [
   "function start_game() returns (string)",
   "function make_move(string direction) returns (string)",
-  "function get_game_state(string user_address) view returns (string)",
-  "function get_high_score(string wallet) view returns (uint256)"
+  "function get_game_state() view returns (string)",
+  "function get_high_score() view returns (uint256)"
 ];
 
 type Point = { x: number; y: number };
@@ -69,7 +69,7 @@ export default function SnakeGame({ wallet, provider, signer }: SnakeGameProps) 
       if (wallet && provider) {
         try {
           const iface = new ethers.Interface(ABI);
-          const data = iface.encodeFunctionData("get_game_state", [wallet]);
+          const data = iface.encodeFunctionData("get_game_state", []);
           const result = await window.ethereum.request({
             method: 'eth_call',
             params: [{ to: CONTRACT_ADDRESS, data }, "latest"]
@@ -135,7 +135,7 @@ export default function SnakeGame({ wallet, provider, signer }: SnakeGameProps) 
       addLog(`TX Confirmed in Block: ${receipt.blockNumber}`, 'success');
       
       // Fetch new state immediately
-      const callData = iface.encodeFunctionData("get_game_state", [wallet]);
+      const callData = iface.encodeFunctionData("get_game_state", []);
       const callResult = await window.ethereum.request({
         method: 'eth_call',
         params: [{ to: CONTRACT_ADDRESS, data: callData }, "latest"]
@@ -199,7 +199,7 @@ export default function SnakeGame({ wallet, provider, signer }: SnakeGameProps) 
       addLog(`TX Confirmed [${dirString}]`, 'success');
       
       // Fetch the updated state
-      const callData = iface.encodeFunctionData("get_game_state", [wallet]);
+      const callData = iface.encodeFunctionData("get_game_state", []);
       const callResult = await window.ethereum.request({
         method: 'eth_call',
         params: [{ to: CONTRACT_ADDRESS, data: callData }, "latest"]
