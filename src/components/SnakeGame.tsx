@@ -4,7 +4,7 @@ import { ethers } from 'ethers';
 
 const GRID_SIZE = 20;
 
-const CONTRACT_ADDRESS = ethers.getAddress("0xdc043eae0d32573b9ad98c4e4e151d04ea8a57dc"); // First 42 characters, checksummed from 0xdc043eae0d32573b9ad98c4e4e151d04ea8a57dcada202dcd50aa53cc3121d7b
+const CONTRACT_ADDRESS = ethers.getAddress("0x0A807CECfF9e256b2c61ed55f1c768D8bEb2c4C6");
 const ABI = [
   "function start_game() returns (string)",
   "function make_move(string direction) returns (string)",
