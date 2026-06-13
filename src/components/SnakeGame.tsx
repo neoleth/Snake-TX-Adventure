@@ -149,7 +149,11 @@ export default function SnakeGame({ wallet, provider, signer }: SnakeGameProps) 
         setStatus('playing');
       }
     } catch (error: any) {
-      addLog(`TX Failed: ${error.message || 'Unknown error'}`, 'error');
+      let errMsg = error.error?.message || error.message || 'Unknown error';
+      if ((typeof errMsg === 'string' && errMsg.includes("RPC endpoint not found")) || error.code === "UNKNOWN_ERROR" || error.code === -32002) {
+         errMsg += " (⚠️ Your MetaMask appears to have a dead RPC URL configured. Please open MetaMask -> Settings -> Networks, find 'GenLayer Bradbury Testnet', and update the RPC URL to 'https://rpc-bradbury.genlayer.com' or delete the network and let the app re-add it.)";
+      }
+      addLog(`TX Failed: ${errMsg}`, 'error');
     } finally {
       setIsPendingTx(false);
     }
@@ -214,7 +218,11 @@ export default function SnakeGame({ wallet, provider, signer }: SnakeGameProps) 
       }
       
     } catch (error: any) {
-      addLog(`TX Failed: ${error.message || 'Unknown error'}`, 'error');
+      let errMsg = error.error?.message || error.message || 'Unknown error';
+      if ((typeof errMsg === 'string' && errMsg.includes("RPC endpoint not found")) || error.code === "UNKNOWN_ERROR" || error.code === -32002) {
+         errMsg += " (⚠️ Your MetaMask appears to have a dead RPC URL configured. Please open MetaMask -> Settings -> Networks, find 'GenLayer Bradbury Testnet', and update the RPC URL to 'https://rpc-bradbury.genlayer.com' or delete the network and let the app re-add it.)";
+      }
+      addLog(`TX Failed: ${errMsg}`, 'error');
     } finally {
       setIsPendingTx(false);
     }
