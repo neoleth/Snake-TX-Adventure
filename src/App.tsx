@@ -17,39 +17,44 @@ export default function App() {
   const [signer, setSigner] = useState<ethers.JsonRpcSigner | null>(null);
 
   const connectWallet = async () => {
-    if (window.ethereum) {
-      try {
-        const _provider = new ethers.BrowserProvider(window.ethereum);
-        const _signer = await _provider.getSigner();
-        setProvider(_provider);
-        setSigner(_signer);
-        setWallet(await _signer.getAddress());
-
-        // Switch to GenLayer Bradbury Testnet (Chain ID 4221 -> 0x107D)
-        try {
-          await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: '0x107D' }],
-          });
-        } catch (switchError: any) {
-          if (switchError.code === 4902) {
-            await window.ethereum.request({
-              method: 'wallet_addEthereumChain',
-              params: [{
-                chainId: '0x107D',
-                chainName: 'GenLayer Bradbury Testnet',
-                nativeCurrency: { name: 'GEN', symbol: 'GEN', decimals: 18 },
-                rpcUrls: ['https://rpc-bradbury.genlayer.com'],
-                blockExplorerUrls: ['https://explorer-bradbury.genlayer.com']
-              }]
-            });
-          }
-        }
-      } catch (err) {
-        console.error(err);
-      }
-    } else {
+    if (!window.ethereum) {
       alert("Please install MetaMask to play on GenLayer!");
+      return;
+    }
+    try {
+      // Switch to GenLayer Bradbury Testnet (Chain ID 4221 -> 0x107D)
+      try {
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x107D' }],
+        });
+      } catch (switchError: any) {
+        if (switchError.code === 4902) {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: '0x107D',
+              chainName: 'GenLayer Bradbury Testnet',
+              nativeCurrency: { name: 'GEN', symbol: 'GEN', decimals: 18 },
+              rpcUrls: ['https://rpc-bradbury.genlayer.com'],
+              blockExplorerUrls: ['https://explorer-bradbury.genlayer.com']
+            }]
+          });
+        } else {
+          throw switchError;
+        }
+      }
+
+      await new Promise(r => setTimeout(r, 500));
+
+      const _provider = new ethers.BrowserProvider(window.ethereum, "any");
+      await _provider.send("eth_requestAccounts", []);
+      const _signer = await _provider.getSigner();
+      setProvider(_provider);
+      setSigner(_signer);
+      setWallet(await _signer.getAddress());
+    } catch (err) {
+      console.error(err);
     }
   };
 

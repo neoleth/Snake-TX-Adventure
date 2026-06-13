@@ -4,12 +4,12 @@ import { ethers } from 'ethers';
 
 const GRID_SIZE = 20;
 
-const CONTRACT_ADDRESS = "0xbc22b3e2371541e11ea0284766a8a1eb6954fef4aba8ba55dd923ec0891bad19";
+const CONTRACT_ADDRESS = ethers.getAddress("0x0656507AFF3D7f2Ff899D0c7c6240d6AAC9e235C");
 const ABI = [
   "function start_game() returns (string)",
   "function make_move(string direction) returns (string)",
-  "function get_game_state(address user_address) view returns (string)",
-  "function get_high_score(address user_address) view returns (uint256)"
+  "function get_game_state(string user_address) view returns (string)",
+  "function get_high_score(string wallet) view returns (uint256)"
 ];
 
 type Point = { x: number; y: number };
@@ -111,11 +111,25 @@ export default function SnakeGame({ wallet, provider, signer }: SnakeGameProps) 
       
       // Manual poll for receipt to bypass ethers formatting errors
       addLog(`Waiting for TX Confirmation...`, 'info');
-      let receipt;
-      while (true) {
-        receipt = await window.ethereum.request({ method: 'eth_getTransactionReceipt', params: [txHash] });
-        if (receipt && receipt.status) break;
+      let receipt = null;
+      const MAX_ATTEMPTS = 45;
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        receipt = await window.ethereum.request({
+          method: 'eth_getTransactionReceipt',
+          params: [txHash]
+        });
+        if (receipt !== null) break;
         await new Promise(res => setTimeout(res, 2000));
+      }
+      
+      if (receipt === null) {
+        addLog(`TX timed out (dropped from mempool): ${txHash.slice(0, 10)}...`, 'error');
+        return;
+      }
+      
+      if (receipt.status === "0x0" || receipt.status === 0) {
+        addLog(`TX Reverted in Block ${receipt.blockNumber}. Check contract state.`, 'error');
+        return;
       }
       
       addLog(`TX Confirmed in Block: ${receipt.blockNumber}`, 'success');
@@ -141,7 +155,7 @@ export default function SnakeGame({ wallet, provider, signer }: SnakeGameProps) 
     }
   };
 
-  const handleMakeMove = async (dirString: string) => {
+  const handleMakeMove = useCallback(async (dirString: string) => {
     if (!signer || !wallet || isPendingTx || status !== 'playing') return;
     
     try {
@@ -157,12 +171,27 @@ export default function SnakeGame({ wallet, provider, signer }: SnakeGameProps) 
       addLog(`TX Submitted: ${txHash.slice(0, 10)}...`, 'warn');
       
       // Manual poll for receipt
-      let receipt;
-      while (true) {
-        receipt = await window.ethereum.request({ method: 'eth_getTransactionReceipt', params: [txHash] });
-        if (receipt && receipt.status) break;
+      let receipt = null;
+      const MAX_ATTEMPTS = 45;
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        receipt = await window.ethereum.request({
+          method: 'eth_getTransactionReceipt',
+          params: [txHash]
+        });
+        if (receipt !== null) break;
         await new Promise(res => setTimeout(res, 2000));
       }
+
+      if (receipt === null) {
+        addLog(`TX timed out (dropped from mempool): ${txHash.slice(0, 10)}...`, 'error');
+        return;
+      }
+
+      if (receipt.status === "0x0" || receipt.status === 0) {
+        addLog(`TX Reverted in Block ${receipt.blockNumber}. Check contract state.`, 'error');
+        return;
+      }
+
       addLog(`TX Confirmed [${dirString}]`, 'success');
       
       // Fetch the updated state
@@ -189,7 +218,7 @@ export default function SnakeGame({ wallet, provider, signer }: SnakeGameProps) 
     } finally {
       setIsPendingTx(false);
     }
-  };
+  }, [signer, wallet, isPendingTx, status, addLog]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -214,7 +243,7 @@ export default function SnakeGame({ wallet, provider, signer }: SnakeGameProps) 
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [status, isPendingTx, wallet, signer]);
+  }, [status, isPendingTx, handleMakeMove]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">

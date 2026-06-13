@@ -218,6 +218,9 @@
         if (errMsg.includes("execution reverted")) {
            errMsg += " (⚠️ The execution reverted. You most likely deployed the 'PredictionMarket' contract from your previous assignment instead of the 'SnakeGame' Python code.)";
         }
+        if (errMsg.includes("RPC endpoint not found") || e.code === "UNKNOWN_ERROR") {
+           errMsg += " (⚠️ Your MetaMask appears to have a dead RPC URL configured for GenLayer. Please open MetaMask -> Settings -> Networks, find 'GenLayer Bradbury Testnet', and update the RPC URL to 'https://rpc-bradbury.genlayer.com' or delete the network and refresh to add it again.)";
+        }
         status.textContent = "❌ Transaction failed: " + errMsg;
       } finally {
         isPendingTx = false;
@@ -242,7 +245,10 @@
         await loadHighScore();
       } catch (e) {
         console.error("TX Error:", e);
-        const errMsg = e.error?.message || e.shortMessage || e.message || "Unknown error";
+        let errMsg = e.error?.message || e.shortMessage || e.message || "Unknown error";
+        if (errMsg.includes("RPC endpoint not found") || e.code === "UNKNOWN_ERROR") {
+           errMsg += " (⚠️ Your MetaMask appears to have a dead RPC URL configured. Please update the RPC URL for GenLayer to 'https://rpc-bradbury.genlayer.com' in MetaMask settings.)";
+        }
         status.textContent = "❌ Move failed: " + errMsg;
       } finally {
         isPendingTx = false;

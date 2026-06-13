@@ -1,111 +1,80 @@
 export const PYTHON_CONTRACT = `
-# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
-
+# v0.1.0 Snake Game GenLayer Contract
 from genlayer import *
 import json
-from typing import List, Tuple
-import random
 
-@gl.contract
-class SnakeGame:
-    players: TreeMap[Address, str]
-    high_scores: TreeMap[Address, u256]
-
+class SnakeGame(gl.Contract):
     def __init__(self):
-        self.players = TreeMap()
-        self.high_scores = TreeMap()
+        self.games = {}
+        self.high_scores = {}
 
     @gl.public.write
     def start_game(self) -> str:
-        """Starts or resets a game for the caller."""
-        sender = gl.message.sender
-        initial_snake = [{"x": 10, "y": 10}, {"x": 10, "y": 11}, {"x": 10, "y": 12}]
-        state = {
-            "snake": initial_snake,
-            "direction": "up",
-            "food": self._spawn_food(initial_snake),
-            "score": 0,
-            "status": "playing"
+        addr = str(gl.message.sender)
+        self.games[addr] = {
+            "snake": [{"x": 10, "y": 10}, {"x": 10, "y": 11}],
+            "food": {"x": 5, "y": 5},
+            "status": "playing",
+            "score": 0
         }
-        self.players[sender] = json.dumps(state)
-        return self.players[sender]
-
+        return json.dumps(self.games[addr])
+    
     @gl.public.write
     def make_move(self, direction: str) -> str:
-        """
-        Executes a move and charges implicit gas.
-        Valid directions: 'up', 'down', 'left', 'right'.
-        """
-        sender = gl.message.sender
-        if sender not in self.players:
-            return json.dumps({"error": "Game not started"})
-
-        game = json.loads(self.players[sender])
-        if game["status"] != "playing":
-            return self.players[sender]
-
-        head_x, head_y = game["snake"][0]["x"], game["snake"][0]["y"]
-
-        if direction == "up": head_y -= 1
-        elif direction == "down": head_y += 1
-        elif direction == "left": head_x -= 1
-        elif direction == "right": head_x += 1
-
-        new_head = {"x": head_x, "y": head_y}
-
-        # Check wall collisions (20x20 grid)
-        if head_x < 0 or head_x >= 20 or head_y < 0 or head_y >= 20:
-            game["status"] = "game_over"
-            self._update_score(sender, game["score"])
-            self.players[sender] = json.dumps(game)
-            return self.players[sender]
-
-        # Check self collisions
-        if new_head in game["snake"]:
-            game["status"] = "game_over"
-            self._update_score(sender, game["score"])
-            self.players[sender] = json.dumps(game)
-            return self.players[sender]
-
-        # Move snake
-        game["snake"].insert(0, new_head)
-
-        # Check food interaction
-        if new_head == game["food"]:
-            game["score"] += 10
-            game["food"] = self._spawn_food(game["snake"])
-        else:
-            game["snake"].pop() # Remove tail if no food eaten
+        addr = str(gl.message.sender)
+        if addr not in self.games or self.games[addr]["status"] == "game_over":
+            return json.dumps({"error": "Game not started or game over"})
             
-        self.players[sender] = json.dumps(game)
-        return self.players[sender]
-
+        game = self.games[addr]
+        head = game["snake"][0]
+        
+        nx = head["x"]
+        ny = head["y"]
+        if direction == "up": ny -= 1
+        elif direction == "down": ny += 1
+        elif direction == "left": nx -= 1
+        elif direction == "right": nx += 1
+        
+        # Grid is 20x20
+        if nx < 0 or ny < 0 or nx >= 20 or ny >= 20:
+            game["status"] = "game_over"
+            return json.dumps(game)
+            
+        # Check self collision
+        for seg in game["snake"]:
+            if seg["x"] == nx and seg["y"] == ny:
+                game["status"] = "game_over"
+                return json.dumps(game)
+                
+        new_head = {"x": nx, "y": ny}
+        game["snake"].insert(0, new_head)
+        
+        # Check food
+        if nx == game["food"]["x"] and ny == game["food"]["y"]:
+            game["score"] += 1
+            # deterministic pseudo-random food spawn
+            game["food"]["x"] = (nx * 7 + 13) % 20
+            game["food"]["y"] = (ny * 11 + 17) % 20
+            
+            if addr not in self.high_scores or int(game["score"]) > int(self.high_scores[addr]):
+                self.high_scores[addr] = game["score"]
+        else:
+            game["snake"].pop()
+            
+        self.games[addr] = game
+        return json.dumps(game)
+        
     @gl.public.view
-    def get_game_state(self, user_address: Address) -> str:
-        """Returns the current state of a player's game as JSON."""
-        if user_address in self.players:
-            return self.players[user_address]
-        return json.dumps({"error": "No state"})
-
+    def get_game_state(self, user_address: str) -> str:
+        if user_address in self.games:
+            return json.dumps(self.games[user_address])
+        return json.dumps({"error": "No game found"})
+        
     @gl.public.view
-    def get_high_score(self, user_address: Address) -> u256:
-        """Returns the high score for a given user."""
-        if user_address in self.high_scores:
-            return self.high_scores[user_address]
+    def get_high_score(self, wallet: str) -> u256:
+        if wallet in self.high_scores:
+            return u256(self.high_scores[wallet])
         return u256(0)
-
-    def _spawn_food(self, snake: list) -> dict:
-        """Helper to spawn food outside the snake body."""
-        while True:
-            food = {"x": random.randint(0, 19), "y": random.randint(0, 19)}
-            if food not in snake:
-                return food
-
-    def _update_score(self, user_address: Address, score: int):
-        """Updates the high score for the user."""
-        current_score = int(self.high_scores.get(user_address, u256(0)))
-        if score > current_score:
-            self.high_scores[user_address] = u256(score)
 `.trim();
 
 export const GUIDE_CONTENT = [
